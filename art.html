@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <title>互動字母筆刷</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/p5.min.js"></script>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      background-color: #1e1e1e;
+    }
+    canvas {
+      display: block;
+      margin: auto;
+    }
+  </style>
+</head>
+<body>
+
+<script>
+let cols, rows;
+let cellSize = 20;
+let letters = [];
+let scales = [];
+let t = 0;
+let trail = [];
+let clickedCells = [];
+let clickedSequence = "";
+let showSequence = false;
+
+class TrailPoint {
+  constructor(x, y) {
+    this.pos = createVector(x, y);
+    this.life = 1.0;
+  }
+}
+
+function setup() {
+  createCanvas(windowWidth, windowHeight);
+  textAlign(CENTER, CENTER);
+  initializeGrid();
+}
+
+function windowResized() {
+  resizeCanvas(windowWidth, windowHeight);
+  initializeGrid();
+}
+
+function initializeGrid() {
+  cols = floor(width / cellSize);
+  rows = floor(height / cellSize);
+  letters = [];
+  scales = [];
+  for (let i = 0; i < cols; i++) {
+    letters[i] = [];
+    scales[i] = [];
+    for (let j = 0; j < rows; j++) {
+      letters[i][j] = randomLetter();
+      scales[i][j] = 1.0;
+    }
+  }
+}
+
+function draw() {
+  background(30);
+  t += 0.01;
+
+  let colorCenterX = mouseX;
+  let colorCenterY = mouseY;
+
+  if (frameCount % 2 === 0) {
+    trail.push(new TrailPoint(colorCenterX / cellSize, colorCenterY / cellSize));
+  }
+
+  for (let i = trail.length - 1; i >= 0; i--) {
+    trail[i].life -= 0.05;
+    if (trail[i].life <= 0) trail.splice(i, 1);
+  }
+
+  while (trail.length > 50) trail.shift();
+
+  let midRow = floor(rows / 2);
+
+  for (let i = 0; i < cols; i++) {
+    for (let j = 0; j < rows; j++) {
+      if (j === midRow) continue;
+
+      let x = i * cellSize + cellSize / 2;
+      let y = j * cellSize + cellSize / 2;
+
+      let offsetX = map(noise(i * 0.3, j * 0.3, t), 0, 1, -2, 2);
+      let offsetY = map(noise(i * 0.3 + 100, j * 0.3 + 100, t), 0, 1, -2, 2);
+
+      let isClicked = clickedCells.some(c => c.x === i && c.y === j);
+
+      if (isClicked || dist(mouseX, mouseY, x, y) < cellSize / 2) {
+        let pulse = sin(frameCount * 0.1) * 0.2;
+        scales[i][j] = lerp(scales[i][j], 3.0 + pulse, 0.1);
+      } else {
+        scales[i][j] = lerp(scales[i][j], 1.0, 0.1);
+      }
+
+      let baseColor = color(255);
+      let centerColor = color(255, 255, 0);
+      let edgeColor = color(255, 105, 180);
+
+      let heat = 0;
+      for (let p of trail) {
+        let d = dist(i, j, p.pos.x, p.pos.y);
+        let r = 5.0 * p.life;  // ⬅ 增大顏色影響範圍（原為 2.5）
+        if (d < r) {
+          let amt = map(d, 0, r, 1.0, 0);
+          heat = max(heat, amt * p.life);
+        }
+      }
+
+      let finalColor;
+      if (isClicked || dist(mouseX, mouseY, x, y) < cellSize / 2) {
+        finalColor = centerColor;
+      } else if (heat > 0) {
+        let amt = pow(heat, 1.0);
+        finalColor = lerpColor(centerColor, edgeColor, amt);
+      } else {
+        finalColor = baseColor;
+      }
+
+      fill(finalColor);
+      textSize(cellSize * scales[i][j]);
+      text(letters[i][j], x + offsetX, y + offsetY);
+    }
+  }
+
+  if (showSequence && clickedSequence.length > 0) {
+    let y = midRow * cellSize + cellSize / 2;
+    textSize(cellSize * 1.2);
+    fill(255, 255, 0);
+    for (let k = 0; k < clickedSequence.length; k++) {
+      let x = (k + 1) * cellSize + cellSize / 2;
+      if (x > width - cellSize) break;
+      text(clickedSequence.charAt(k), x, y);
+    }
+  }
+}
+
+function mousePressed() {
+  let closestI = -1;
+  let closestJ = -1;
+  let closestDist = Infinity;
+
+  for (let i = 0; i < cols; i++) {
+    for (let j = 0; j < rows; j++) {
+      let x = i * cellSize + cellSize / 2;
+      let y = j * cellSize + cellSize / 2;
+      let d = dist(mouseX, mouseY, x, y);
+      if (d < closestDist) {
+        closestDist = d;
+        closestI = i;
+        closestJ = j;
+      }
+    }
+  }
+
+  if (closestI !== -1 && closestJ !== -1) {
+    clickedCells.push(createVector(closestI, closestJ));
+    clickedSequence += letters[closestI][closestJ];
+  }
+}
+
+function keyPressed() {
+  if (key === ' ') {
+    showSequence = !showSequence;
+  } else if (key === 'c' || key === 'C') {
+    clickedCells = [];
+    clickedSequence = "";
+    showSequence = false;
+  }
+}
+
+function randomLetter() {
+  let index = floor(random(52));
+  return index < 26 ? String.fromCharCode(65 + index) : String.fromCharCode(97 + index - 26);
+}
+</script>
+
+</body>
+</html>
